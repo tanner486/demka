@@ -1,0 +1,467 @@
+Form1.cs авторизация
+
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.Configuration;
+using System.Data.SqlClient;
+
+namespace demo
+{
+    public partial class Form1 : Form
+    {
+        private string connectionString = ConfigurationManager.ConnectionStrings["demoConnect"].ConnectionString;
+        public Form1()
+        {
+            InitializeComponent();
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            string login = loginTextBox.Text;
+            string password = passwordTextBox.Text;
+
+            
+            if (AuthenticateUser(login, password, out string userRole))
+            {
+                MessageBox.Show($"Вы вошли под ролью {userRole}", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                // Переход на соответствующую форму в зависимости от роли
+                if (userRole == "student")
+                {
+                    StudentForm studentForm = new StudentForm();
+                    studentForm.Show();
+                }
+                else if (userRole == "teacher")
+                {
+                    TeacherForm teacherForm = new TeacherForm();
+                    teacherForm.Show();
+                }
+
+                this.Hide();
+            }
+            else
+            {
+                MessageBox.Show("Неверный логин или пароль", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private bool AuthenticateUser(string login, string password, out string userRole)
+        {
+            userRole = string.Empty;
+
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+                string query = "SELECT user_role FROM users WHERE login = @login AND passwrd = @password";
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("@login", login);
+                    command.Parameters.AddWithValue("@password", password);
+
+                    var result = command.ExecuteScalar();
+                    if (result != null)
+                    {
+                        userRole = result.ToString();
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private void checkBox1_CheckedChanged(object sender, EventArgs e)
+        {
+            passwordTextBox.UseSystemPasswordChar = !checkBox1.Checked;
+        }
+    }
+}
+
+
+student.cs
+
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Data.SqlClient;
+using System.Configuration;
+using System.Windows.Forms;
+
+namespace WindowsFormsApp10
+{
+    public partial class student : Form
+    {
+        private int userId;
+        public student(int userId)
+        {
+            InitializeComponent();
+            this.userId = userId;
+        }
+
+        private void student_Load(object sender, EventArgs e)
+        {
+            LoadStudentGradesByUserId(userId);
+            LoadStudentInfoByUserId(userId);
+        }
+        private void LoadStudentGradesByUserId(int userId)
+        {
+            string connectionString = ConfigurationManager.ConnectionStrings["test_connect"].ConnectionString;
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+
+                // Получаем id_ученика по user_id
+                int studentId;
+                string studentQuery = "SELECT id_ученика FROM ученики WHERE user_id = @userId";
+                using (SqlCommand studentCommand = new SqlCommand(studentQuery, connection))
+                {
+                    studentCommand.Parameters.AddWithValue("@userId", userId);
+                    object result = studentCommand.ExecuteScalar();
+                    if (result != null)
+                    {
+                        studentId = (int)result;
+                    }
+                    else
+                    {
+                        MessageBox.Show("Студент не найден.");
+                        return;
+                    }
+                }
+
+                // Запрос для получения оценок конкретного студента
+                string gradesQuery = "SELECT id_предмета, оценка FROM оценки WHERE id_ученика = @studentId";
+                using (SqlCommand gradesCommand = new SqlCommand(gradesQuery, connection))
+                {
+                    gradesCommand.Parameters.AddWithValue("@studentId", studentId);
+                    SqlDataAdapter adapter = new SqlDataAdapter(gradesCommand);
+                    DataTable gradesTable = new DataTable();
+                    adapter.Fill(gradesTable);
+
+                    // Привязка данных к DataGridView
+                    gradesDataGridView.DataSource = gradesTable;
+                }
+            }
+        }
+        private void LoadStudentInfoByUserId(int userId)
+        {
+            string connectionString = ConfigurationManager.ConnectionStrings["test_connect"].ConnectionString;
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+
+                // Запрос для получения ФИО студента по user_id
+                string studentQuery = "SELECT фамилия, имя, отчество FROM ученики WHERE user_id = @userId";
+                using (SqlCommand studentCommand = new SqlCommand(studentQuery, connection))
+                {
+                    studentCommand.Parameters.AddWithValue("@userId", userId);
+                    using (SqlDataReader reader = studentCommand.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            string lastName = reader["фамилия"].ToString();
+                            string firstName = reader["имя"].ToString();
+                            string patronymic = reader["отчество"].ToString();
+
+                            // Устанавливаем текст для Label
+                            studentInfoLabel.Text = $"{lastName} {firstName} {patronymic}";
+                        }
+                        else
+                        {
+                            studentInfoLabel.Text = "Студент не найден.";
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+}
+
+
+prepod.cs
+
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Data.SqlClient;
+using System.Configuration;
+using System.Windows.Forms;
+
+namespace WindowsFormsApp10
+{
+    public partial class prepod : Form
+    {
+        public prepod()
+        {
+            InitializeComponent();
+            // Заполнение ComboBox
+            LoadSubjects();
+            LoadStudents();
+            LoadGrades();
+            LoadGradesDataGridView();
+        }
+
+        public class Subject
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+        }
+
+        public class Student
+        {
+            public int Id { get; set; }
+            public string FullName { get; set; }
+        }
+
+        private void LoadSubjects()
+        {
+            string connectionString = ConfigurationManager.ConnectionStrings["test_connect"].ConnectionString;
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+                string query = "SELECT id_предмета, название FROM предметы";
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    SqlDataReader reader = command.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        // Создаем объект Subject
+                        var subject = new Subject
+                        {
+                            Id = (int)reader["id_предмета"],
+                            Name = reader["название"].ToString()
+                        };
+
+                        // Добавляем в ComboBox
+                        subjectComboBox1.Items.Add(subject);
+                    }
+                }
+            }
+
+            // Настройка отображения текста в ComboBox
+            subjectComboBox1.DisplayMember = "Name";
+            subjectComboBox1.ValueMember = "Id";
+        }
+
+        private void UpdateDataGridView()
+        {
+            string connectionString = ConfigurationManager.ConnectionStrings["test_connect"].ConnectionString;
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+                string query = "SELECT id_оценки, id_ученика, id_предмета, оценка FROM оценки"; // Запрос для получения данных
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    SqlDataAdapter adapter = new SqlDataAdapter(command);
+                    DataTable gradesTable = new DataTable();
+                    adapter.Fill(gradesTable);
+
+                    // Привязка данных к DataGridView
+                    gradesDataGridView.DataSource = gradesTable;
+                }
+            }
+        }
+
+        private void LoadStudents()
+        {
+            string connectionString = ConfigurationManager.ConnectionStrings["test_connect"].ConnectionString;
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+                string query = "SELECT id_ученика, имя, фамилия, отчество FROM ученики";
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    SqlDataReader reader = command.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        // Создаем объект Student
+                        var student = new Student
+                        {
+                            Id = (int)reader["id_ученика"],
+                            FullName = $"{reader["фамилия"]} {reader["имя"]} {reader["отчество"]}"
+                        };
+
+                        // Добавляем в ComboBox
+                        studentComboBox1.Items.Add(student);
+                    }
+                }
+            }
+
+            // Настройка отображения текста в ComboBox
+            studentComboBox1.DisplayMember = "FullName";
+            studentComboBox1.ValueMember = "Id";
+        }
+
+        private void LoadGradesDataGridView()
+        {
+            string connectionString = ConfigurationManager.ConnectionStrings["test_connect"].ConnectionString;
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+                string query = "SELECT id_оценки, id_ученика, id_предмета, оценка FROM оценки";
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    SqlDataAdapter adapter = new SqlDataAdapter(command);
+                    DataTable gradesTable = new DataTable();
+                    adapter.Fill(gradesTable);
+
+                    // Привязка данных к DataGridView
+                    gradesDataGridView.DataSource = gradesTable;
+                }
+            }
+        }
+
+
+        private void LoadGrades()
+        {
+            for (int i = 1; i <= 5; i++) // Предполагаем, что оценки от 1 до 5
+            {
+                gradeComboBox1.Items.Add(i);
+            }
+        }
+
+        private void SubmitButton_Click(object sender, EventArgs e)
+        {
+            // Получаем выбранный объект из ComboBox студентов
+            var selectedStudent = (Student)studentComboBox1.SelectedItem;
+            int studentId = selectedStudent.Id; // Получаем id студента
+
+            // Получаем выбранный объект из ComboBox предметов
+            var selectedSubject = (Subject)subjectComboBox1.SelectedItem;
+            int subjectId = selectedSubject.Id; // Получаем id предмета
+
+            // Получаем выбранную оценку
+            int grade = (int)gradeComboBox1.SelectedItem;
+
+            // Вставка данных в таблицу "оценки"
+            string connectionString = ConfigurationManager.ConnectionStrings["test_connect"].ConnectionString;
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+                string query = "INSERT INTO оценки (id_ученика, id_предмета, оценка) VALUES (@studentId, @subjectId, @grade)";
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("@studentId", studentId);
+                    command.Parameters.AddWithValue("@subjectId", subjectId);
+                    command.Parameters.AddWithValue("@grade", grade);
+
+                    command.ExecuteNonQuery();
+                    MessageBox.Show("Оценка успешно добавлена!");
+                }
+            }
+            UpdateDataGridView();
+        }
+    }
+}
+
+
+Form1.cs (авторизация)
+
+using System;
+using System.Data.SqlClient;
+using System.Configuration;
+using System.Windows.Forms;
+
+namespace WindowsFormsApp10
+{
+    public partial class Form1 : Form
+    {
+        public Form1()
+        {
+            InitializeComponent();
+        }
+
+        private void checkBox1_CheckedChanged(object sender, EventArgs e)
+        {
+            password_textBox.UseSystemPasswordChar = !checkBox1.Checked;
+        }
+
+        private string CheckUser(string login, string password)
+        {
+            string role = null;
+
+            // Подключение к базе данных
+            string connectionString = ConfigurationManager.ConnectionStrings["test_connect"].ConnectionString;
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+                string query = "SELECT role, user_id FROM users WHERE login = @login AND password = @password";
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("@login", login);
+                    command.Parameters.AddWithValue("@password", password);
+
+                    // Выполнение запроса и получение роли и user_id
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            role = reader["role"].ToString();
+                            // Сохраняем user_id для дальнейшего использования
+                            int userId = (int)reader["user_id"];
+                            OpenUserForm(role, userId);
+                        }
+                    }
+                }
+            }
+
+            return role;
+        }
+
+        private void OpenUserForm(string role, int userId)
+        {
+            if (role == "student")
+            {
+                // Открытие формы для студента с передачей user_id
+                student studentForm = new student(userId);
+                studentForm.Show();
+                this.Hide();
+            }
+            else if (role == "prepod")
+            {
+                // Открытие формы для преподавателя
+                prepod prepodForm = new prepod();
+                prepodForm.Show();
+                this.Hide();
+            }
+            else
+            {
+                MessageBox.Show("Неверный логин или пароль.");
+            }
+        }
+
+        private void login_btn_Click(object sender, EventArgs e)
+        {
+            string login = login_textBox.Text;
+            string password = password_textBox.Text;
+
+            // Проверка пользователя в базе данных
+            CheckUser(login, password);
+        }
+    }
+}
+
+App.config
+
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+	<connectionStrings>
+		<add name="test_connect" connectionString="Data Source=DESKTOP-KKLARP2;Initial Catalog=test;Integrated Security=True" providerName="System.Data.SqlClient" />
+	</connectionStrings>
+</configuration>
